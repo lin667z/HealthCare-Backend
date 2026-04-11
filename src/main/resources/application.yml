@@ -1,0 +1,91 @@
+server:
+  port: 8088
+  compression:
+    enabled: true
+    mime-types: application/json,application/xml,text/html,text/xml,text/plain,text/css,text/javascript,application/javascript
+    min-response-size: 1024
+
+spring:
+  application:
+    name: tlias-web-management
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+  ai:
+    dashscope:
+      api-key: ${dashscope.api.key}
+      chat:
+        options:
+          model: ${dashscope.model}
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/chronic_disease_db
+    username: root
+    password: ${DB_PASSWORD:root}
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+
+logging:
+  level:
+    com.nlpai4h: info
+
+app:
+  log:
+    max-len: -1
+    response:
+      enabled: true
+    slow-sql:
+      threshold-ms: 1000
+
+mxb:
+  jwt:
+    mxb-secret-key: ${JWT_SECRET_KEY:your_jwt_secret_key_here}
+    mxb-ttl: 7200000000
+    mxb-token-name: authentication
+
+dashscope:
+  api:
+    key: ${DASHSCOPE_API_KEY}
+  model: "qwen-flash"
+
+ai:
+  report:
+    system-prompt: |
+      You are a senior clinical documentation assistant.
+      Use only the supplied patient context.
+      Do not guess missing facts.
+      Do not mention being an AI.
+      Do not output patient name, ID number, phone number, address, or contact details.
+      If the evidence is insufficient, explicitly write "不足以判断".
+    developer-prompt: |
+      Produce a Chinese markdown report only.
+      The report must follow this exact structure and keep every heading:
+      # AI临床报告
+      ## 1. 患者概览
+      ## 2. 核心临床判断
+      ## 3. 异常检查/检验解读
+      ## 4. 风险提示
+      ## 5. 诊疗建议
+      ## 6. 依据与证据摘要
+      ## 7. 局限性声明
+
+      Rules:
+      1. Every section must be present.
+      2. If data is missing, write "未提供相关数据".
+      3. Every recommendation must be tied to evidence.
+      4. Evidence should be cited inline with source and time.
+      5. Do not output JSON, code fences, greetings, or meta commentary.
+      6. Highlight the most important clinical conclusions with markdown bold.
+    banned-phrases:
+      - 作为AI
+      - 作为一个AI
+      - 语言模型
+      - 仅供参考
