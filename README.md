@@ -1,4 +1,4 @@
-# 🏥 Healthy Demo Backend (医疗健康大模型系统后端)
+# 🏥 HealthCare-Backend (医疗健康大模型系统后端)
 
 > 基于 Spring Boot 3 和大语言模型（Spring AI Alibaba）构建的医疗健康管理与智能报告生成系统后端。
 
