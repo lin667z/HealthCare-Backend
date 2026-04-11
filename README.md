@@ -1,97 +1,47 @@
-# 🏥 HealthCare-Backend (医疗健康大模型系统后端)
-
-> 基于 Spring Boot 3 和大语言模型（Spring AI Alibaba）构建的医疗健康管理与智能报告生成系统后端。
+# 🏥 HealthCare-Backend (医疗业务中台与智能调度引擎)
 
 ## 🌟 项目简介
 
-本项目是一个结合了 AI 能力的医疗健康演示系统后端服务。系统提供了完善的患者管理、门诊记录、临床数据管理等基础医疗功能，并深度集成了 **阿里云 DashScope（通义千问）** 大模型，能够根据患者的临床病历和检查检验结果，智能生成规范的 **AI 临床报告**。
+基于 **Spring Boot 3** 和大语言模型（**Spring AI Alibaba**）构建的高性能医疗业务中台与 AI 智能调度引擎。系统不仅提供了从患者挂号、门诊记录到临床数据管理（诊、疗、护、管）的完整医疗业务闭环，还深度集成了阿里云 DashScope（通义千问）大模型。通过领域驱动的设计理念与智能提示词编排策略，系统为前台应用提供稳定、安全的临床数据支撑，以及专业级、可视化的 AI 辅助临床分析报告。
 
-## ✨ 核心特性
+## ✨ 核心业务模块
 
-- **👨‍⚕️ 患者与门诊管理**：患者基础信息管理、门急诊就诊记录追踪。
-- **📋 临床数据管理**：结构化的入院记录、病案首页、护理记录、检验结果和检查报告管理。
-- **🤖 智能 AI 报告**：基于 Spring AI Alibaba 接入通义千问大模型，结合患者上下文自动生成专业的 AI 临床总结报告。
-- **🔐 权限与安全**：基于 JWT 的身份认证体系与拦截器设计。
-- **📄 规范化异常处理**：全局统一的异常拦截与标准化的数据返回结构（Result / PageResult）。
-- **📊 慢日志拦截**：配置了慢 SQL 拦截器，便于系统性能优化与分析。
+- **👨‍⚕️ 患者与门诊全景流**
+  构建全景式的患者基础信息库与门急诊就诊记录追踪系统，支持海量历史就诊轨迹的长效溯源与复杂条件下的快速组合检索。
+- **📋 临床数据生命周期体系**
+  实现核心医疗数据的标准化归档与全生命周期管理，全面涵盖：结构化入院记录、病案首页档案、高频度护理日志、核心生命体征追踪、实验室检验指标跟踪以及医学影像学检查报告的数字化管理。
+- **🤖 智能 AI 临床调度核心 (核心亮点)**
+  - **动态临床上下文构建**：自动抽取患者既往病历、当前体征走势与最新检验检查结果，清洗并构建高精度的医疗领域大模型上下文（Context）。
+  - **专业临床辅助报告生成**：依托通义千问大模型，结合医学提示词模板，自动输出涵盖“异常指标深度解读”、“潜在并发症风险预警”与“规范化治疗干预建议”的智能报告。
+- **🔐 RBAC 安全与权限审计流**
+  基于 JWT 构建的无状态身份认证与访问控制体系，支持细粒度的角色鉴权（Role-Based Access Control），并实现了严密的医疗数据访问权限审批工作流机制。
 
-## 🛠️ 技术栈
+## 🛠️ 技术架构与设计亮点
 
-- **核心框架**：Java 17, Spring Boot 3.2.5
-- **持久层框架**：MyBatis-Plus 3.5.5
-- **数据库**：MySQL 8.0+
-- **AI 框架**：Spring AI Alibaba (接入 DashScope 通义千问 `qwen-flash`)
-- **安全与工具**：JWT (jjwt 0.12.6), Hutool, Lombok, DozerMapper, Fastjson
+- **现代化微服务技术基石**：采用 **Java 17** 与 **Spring Boot 3.2.5** 现代化架构栈，配合 MyBatis-Plus 3.5.5 实现了复杂医疗模型的高效数据持久化与关联聚合查询。
+- **大模型无缝融合驱动 (Spring AI Alibaba)**：
+  系统在架构上专门划分了 `ai` 核心能力域，引入大模型驱动框架，内置 **提示词构建器 (PromptBuilder)**、**结果解析器 (Parser)** 以及 **AI 任务编排引擎 (Orchestrator)**。实现了从底层医疗数据清洗聚合、大模型流式对话交互到前台 Markdown 文本渲染层解析的全自动流转链路。
+- **高健壮性与规范化设计**：
+  - **全局统一响应体系**：基于 Spring AOP 与 `@ControllerAdvice` 实现全局统一的业务异常拦截与运行时错误捕获，对外提供标准化的接口返回数据结构（`Result` / `PageResult`）。
+  - **领域对象优雅映射**：引入 Dozer 映射组件，实现实体类 (Entity) 与业务数据传输对象 (DTO)、表现层视图对象 (VO) 之间的深层解耦与防腐层高效转换。
+- **全链路性能监控与安全审计**：
+  基于自定义切面注解实现了核心敏感医疗操作的日志溯源追踪，并在底层配置了 **慢 SQL 拦截器** 以支持高并发高负载场景下的数据库性能瓶颈定位与动态调优。
 
-## 🚀 快速开始
-
-### 1. 环境准备
-
-- JDK 17 或以上版本
-- Maven 3.6+
-- MySQL 8.0+
-- 阿里云 DashScope API Key（用于 AI 报告生成功能）
-
-### 2. 数据库配置
-
-1. 在本地 MySQL 中创建名为 `chronic_disease_db` 的数据库：
-   ```sql
-   CREATE DATABASE chronic_disease_db DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-   ```
-2. *注意：请自行导入项目相关的 SQL 结构脚本至该数据库。*
-
-### 3. 配置环境变量
-
-项目已对敏感信息进行了脱敏处理。在运行项目之前，请在你的 IDE 或操作系统中配置以下环境变量（或使用 `.env` 插件）：
-
-| 环境变量名 | 说明 | 示例值 / 默认值 |
-| --- | --- | --- |
-| `DB_PASSWORD` | 数据库 root 用户的密码 | `root` |
-| `JWT_SECRET_KEY` | JWT 签名的密钥 (至少32位) | `your_jwt_secret_key_here` |
-| `DASHSCOPE_API_KEY` | 阿里云通义千问 API Key | `sk-xxxxxxxxx` |
-
-> 💡 **提示**：如果在 IDEA 中运行，可以在 `Run/Debug Configurations` 的 `Environment variables` 选项中添加这些配置。
-
-### 4. 运行项目
-
-使用 Maven 编译并启动 Spring Boot 应用：
-
-```bash
-mvn clean install
-mvn spring-boot:run
-```
-
-项目默认运行在 `8088` 端口。
-
-## 📁 项目结构
+## 📁 核心架构目录 (DDD 风格演进)
 
 ```text
-src/main/java/com/nlpai4h/healthydemobacked/
-├── aspect/         # AOP 切面（日志记录等）
-├── common/         # 公共组件（常量、异常处理、统一返回结果等）
-├── config/         # 核心配置类（WebMvc、MybatisPlus、线程池、跨域等）
-├── controller/     # RESTful API 控制器（处理 HTTP 请求）
-├── filter/         # Web 过滤器（TraceId 等）
-├── interceptor/    # 拦截器（JWT 校验、慢 SQL 监控）
-├── mapper/         # MyBatis Mapper 接口
-├── model/          # 数据模型 (DTO, Entity, Event, VO)
-├── service/        # 业务逻辑层 (包括 AI 大模型调用服务)
-│   ├── ai/         # AI 核心实现 (提示词构建、报告解析、大模型编排)
-│   ├── helper/     # 业务辅助类
-│   └── impl/       # 业务逻辑实现类
-├── utils/          # 工具类 (JWT, Bean 拷贝等)
-└── HealthyDemoBackedApplication.java # 项目启动类
+HealthCare-Backend/
+├── aspect/         # 核心 AOP 切面层（医疗操作日志审计、接口限流防护等）
+├── common/         # 通用能力与基础设施中心（统一异常体系、全局状态码枚举、Result 结构集）
+├── config/         # 高级配置类中心（WebMvc 跨域策略、MybatisPlus 插件、高并发线程池、大模型连接配置）
+├── controller/     # RESTful API 控制器层（严谨的 HTTP 动词语义及接口版本控制）
+├── filter/         # Web 过滤器层（全链路 TraceId 分布式追踪与防重放机制拦截）
+├── interceptor/    # 系统级强拦截器（JWT 无状态 Token 强校验鉴权、慢 SQL 实时监控）
+├── mapper/         # MyBatis 接口与 XML 动态 SQL 高级映射层
+├── model/          # 领域数据模型层 (严格防腐拆分：DTO 入参, Entity 实体, Event 领域事件, VO 视图输出)
+├── service/        # 核心业务逻辑与聚合服务层
+│   ├── ai/         # 🧠 AI 大模型核心引擎域 (Prompt 策略模版工厂、模型交互编排流、医疗结构化文本抽取器)
+│   ├── helper/     # 跨域业务辅助与数据组装支撑类
+│   └── impl/       # 复杂医疗业务闭环具体实现类
+└── utils/          # 高性能核心工具库 (JWT 签发验签算法、敏感数据加解密、高性能 Bean 深浅拷贝等)
 ```
-
-## 🤝 参与贡献
-
-欢迎提交 Issue 和 Pull Request 来完善这个项目！
-
-1. Fork 本仓库
-2. 创建您的特性分支 (`git checkout -b feature/AmazingFeature`)
-3. 提交您的更改 (`git commit -m 'Add some AmazingFeature'`)
-4. 推送到分支 (`git push origin feature/AmazingFeature`)
-5. 开启一个 Pull Request
-
----
-*Powered by [Spring AI Alibaba](https://github.com/alibaba/spring-ai-alibaba) & DashScope*
