@@ -17,19 +17,23 @@ import com.nlpai4h.healthydemobacked.service.helper.VisitContextHelper;
 import jakarta.annotation.Resource;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.util.concurrent.Executor;
-
-import org.springframework.context.event.EventListener;
+import java.io.IOException;
 import java.util.Map;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import com.nlpai4h.healthydemobacked.model.event.AiReportProgressEvent;
+
+import org.springframework.context.event.EventListener;
 
 /**
  * AI报告服务实现类
@@ -38,6 +42,16 @@ import com.nlpai4h.healthydemobacked.model.event.AiReportProgressEvent;
 @Service
 @Slf4j
 public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> implements IReportService {
+
+    /** SSE 心跳调度器（daemon 线程，不阻止 JVM 关闭） */
+    private static final ScheduledExecutorService HEARTBEAT_SCHEDULER =
+            Executors.newSingleThreadScheduledExecutor(r -> {
+                Thread t = new Thread(r, "sse-heartbeat");
+                t.setDaemon(true);
+                return t;
+            });
+    /** 心跳间隔（秒） */
+    private static final int HEARTBEAT_INTERVAL_SECONDS = 30;
 
     @Resource
     private IAiGenerationService aiGenerationService;
@@ -49,12 +63,12 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
     private AiReportOrchestrator aiReportOrchestrator;
     @Resource
     @Qualifier("aiTaskExecutor")
-    private Executor aiTaskExecutor;
+    private java.util.concurrent.Executor aiTaskExecutor;
 
     private static class EmitterContext {
-        SseEmitter emitter;
-        AiReportContextVO source;
-        String lastPayload;
+        final SseEmitter emitter;
+        final AiReportContextVO source;
+        volatile String lastPayload;
 
         EmitterContext(SseEmitter emitter, AiReportContextVO source) {
             this.emitter = emitter;
@@ -79,30 +93,27 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
     }
 
     @Override
-    @Transactional
     public void generateAiReport(QueryFormDTO queryFormDTO) {
         startReportGeneration(queryFormDTO);
     }
 
     @Override
-    @Transactional
     public void updateReport(QueryFormDTO queryFormDTO) {
         regenerateReport(queryFormDTO);
     }
 
     /**
      * 启动报告生成任务
-     * 如果当前已有成功或正在生成的任务，则不重复启动
+     * 如果当前已有成功、正在生成、排队中或准备中的任务，则不重复启动
      */
     @Override
-    @Transactional
     public AiReportVO startReportGeneration(QueryFormDTO queryFormDTO) {
         QueryFormDTO normalized = normalizeQuery(queryFormDTO);
         // 准备任务，检查当前状态
         AiReport prepared = aiReportOrchestrator.prepareTask(normalized, false);
         String phase = aiReportOrchestrator.resolveStatusPhase(prepared);
-        // 如果未成功且未在生成中，则发起异步任务
-        if (!AiReportOrchestrator.PHASE_SUCCEEDED.equals(phase) && !AiReportOrchestrator.PHASE_GENERATING.equals(phase)) {
+        // 仅在空闲或失败状态才发起新的异步任务，防止重复生成
+        if (AiReportOrchestrator.PHASE_IDLE.equals(phase) || AiReportOrchestrator.PHASE_FAILED.equals(phase)) {
             aiGenerationService.generateReportAsync(new QueryFormDTO(
                     normalized.getVisitNo(),
                     normalized.getRegistrationNo(),
@@ -118,7 +129,6 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
      * 强制重置任务状态并重新开始生成报告
      */
     @Override
-    @Transactional
     public AiReportVO regenerateReport(QueryFormDTO queryFormDTO) {
         QueryFormDTO normalized = normalizeQuery(queryFormDTO);
         // 强制重置状态
@@ -141,14 +151,23 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
     public SseEmitter streamAiReport(QueryFormDTO queryFormDTO) {
         QueryFormDTO normalized = normalizeQuery(queryFormDTO);
         SseEmitter emitter = new SseEmitter(10 * 60 * 1000L);
-        
+
         String key = normalized.getVisitNo() + ":" + normalized.getRegistrationNo();
         AiReportContextVO source = patientRecordSummaryHelper.buildAiReportContext(normalized);
-        
+
         EmitterContext context = new EmitterContext(emitter, source);
         emitterMap.computeIfAbsent(key, k -> new CopyOnWriteArrayList<>()).add(context);
-        
-        // Push initial state
+
+        // 启动心跳任务，防止长生成过程中连接超时
+        ScheduledFuture<?> heartbeat = HEARTBEAT_SCHEDULER.scheduleAtFixedRate(() -> {
+            try {
+                emitter.send(SseEmitter.event().comment("heartbeat"));
+            } catch (IOException ex) {
+                // emitter 已关闭，忽略
+            }
+        }, HEARTBEAT_INTERVAL_SECONDS, HEARTBEAT_INTERVAL_SECONDS, TimeUnit.SECONDS);
+
+        // 推送初始状态快照
         aiTaskExecutor.execute(() -> {
             try {
                 AiReport current = aiReportOrchestrator.findLatestReport(normalized.getVisitNo(), normalized.getRegistrationNo());
@@ -156,7 +175,7 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
                 String payload = buildPayload(snapshot);
                 context.lastPayload = payload;
                 emitter.send(SseEmitter.event().name("snapshot").data(snapshot));
-                
+
                 if (isTerminalState(snapshot.getStatusPhase())) {
                     emitter.complete();
                     emitterMap.get(key).remove(context);
@@ -166,10 +185,16 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
                 emitterMap.get(key).remove(context);
             }
         });
-        
-        emitter.onCompletion(() -> removeEmitter(key, context));
-        emitter.onTimeout(() -> removeEmitter(key, context));
-        
+
+        emitter.onCompletion(() -> {
+            heartbeat.cancel(true);
+            removeEmitter(key, context);
+        });
+        emitter.onTimeout(() -> {
+            heartbeat.cancel(true);
+            removeEmitter(key, context);
+        });
+
         return emitter;
     }
 
@@ -202,6 +227,11 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
         visitContextHelper.resolveVisitNo(queryFormDTO);
     }
 
+    /**
+     * 异步监听报告进度事件，推送快照到已注册的SSE连接
+     * 使用 @Async 避免阻塞 AI 生成线程
+     */
+    @Async("aiTaskExecutor")
     @EventListener
     public void handleAiReportProgressEvent(AiReportProgressEvent event) {
         String key = event.getVisitNo() + ":" + event.getRegistrationNo();
@@ -220,7 +250,7 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
             try {
                 AiReportVO snapshot = aiReportOrchestrator.toSnapshot(current, context.source, null);
                 String payload = buildPayload(snapshot);
-                
+
                 if (!StrUtil.equals(payload, context.lastPayload)) {
                     context.emitter.send(SseEmitter.event().name("snapshot").data(snapshot));
                     context.lastPayload = payload;
@@ -234,7 +264,7 @@ public class ReportServiceImpl extends ServiceImpl<AiReportMapper, AiReport> imp
                 deadContexts.add(context);
             }
         }
-        
+
         for (EmitterContext dead : deadContexts) {
             removeEmitter(key, dead);
         }

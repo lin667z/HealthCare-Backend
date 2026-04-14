@@ -14,9 +14,21 @@ import com.nlpai4h.healthydemobacked.service.helper.PatientRecordSummaryHelper;
 import jakarta.annotation.Resource;
 import org.springframework.stereotype.Component;
 
+/**
+ * AI临床报告提示词构建器
+ * 核心职责：组装系统指令、报告格式模板、患者临床上下文数据，生成给AI模型的完整提示词
+ * 遵循Spring组件化设计，可直接注入使用
+ *
+ * @author healthy-demo-backed
+ * @date 2025
+ */
 @Component
 public class AiReportPromptBuilder {
 
+    /**
+     * 默认系统角色提示词
+     * 定义AI的身份、行为约束、数据使用规则、隐私保护要求、数据不足时的响应规则
+     */
     private static final String DEFAULT_SYSTEM_PROMPT = """
             You are a senior clinical documentation assistant.
             Use only the supplied patient context.
@@ -26,6 +38,10 @@ public class AiReportPromptBuilder {
             If the evidence is insufficient, explicitly write "不足以判断".
             """;
 
+    /**
+     * 默认开发者格式提示词
+     * 定义AI输出报告的语言、格式、固定章节结构、输出约束和排版规则
+     */
     private static final String DEFAULT_DEVELOPER_PROMPT = """
             Produce a Chinese markdown report only.
             The report must follow this exact structure and keep every heading:
@@ -47,39 +63,77 @@ public class AiReportPromptBuilder {
             6. Highlight the most important clinical conclusions with markdown bold.
             """;
 
+    /**
+     * 患者病历摘要助手：用于封装患者临床数据，构建AI报告上下文对象
+     */
     @Resource
     private PatientRecordSummaryHelper patientRecordSummaryHelper;
+
+    /**
+     * AI配置属性类：用于读取配置文件中自定义的提示词
+     */
     @Resource
     private AiProperties aiProperties;
 
+    /**
+     * 构建AI报告所需的患者上下文数据
+     * @param queryFormDTO 前端查询参数DTO
+     * @return AiReportContextVO 封装完整的患者临床上下文视图对象
+     */
     public AiReportContextVO buildContext(QueryFormDTO queryFormDTO) {
         return patientRecordSummaryHelper.buildAiReportContext(queryFormDTO);
     }
 
+    /**
+     * 核心方法：构建完整的AI提示词
+     * 拼接三部分内容：系统指令 + 开发者格式模板 + 患者临床上下文
+     * @param contextVO 患者上下文视图对象
+     * @return 完整的AI提示词字符串
+     */
     public String buildPrompt(AiReportContextVO contextVO) {
         StringBuilder builder = new StringBuilder();
+        // 拼接系统指令模块
         builder.append("### System Instructions\n");
         builder.append(resolveSystemPrompt()).append("\n\n");
+        // 拼接开发者格式模板模块
         builder.append("### Developer Template\n");
         builder.append(resolveDeveloperPrompt()).append("\n\n");
+        // 拼接用户临床上下文模块
         builder.append("### User Context\n");
         builder.append(buildContextPayload(contextVO));
         return builder.toString();
     }
 
+    /**
+     * 解析系统提示词
+     * 优先级：配置文件systemPrompt > 默认系统提示词
+     * @return 最终生效的系统提示词
+     */
     private String resolveSystemPrompt() {
         return StrUtil.blankToDefault(aiProperties.getSystemPrompt(), DEFAULT_SYSTEM_PROMPT).trim();
     }
 
+    /**
+     * 解析开发者格式提示词
+     * 优先级：配置文件developerPrompt > 配置文件prompt > 默认格式提示词
+     * @return 最终生效的格式提示词
+     */
     private String resolveDeveloperPrompt() {
         String configured = StrUtil.blankToDefault(aiProperties.getDeveloperPrompt(), aiProperties.getPrompt());
         return StrUtil.blankToDefault(configured, DEFAULT_DEVELOPER_PROMPT).trim();
     }
 
+    /**
+     * 构建患者临床上下文文本载荷
+     * 格式化拼接患者基础信息、诊断、检查、检验、护理五大类临床证据
+     * @param contextVO 患者上下文视图对象
+     * @return 格式化后的上下文文本
+     */
     private String buildContextPayload(AiReportContextVO contextVO) {
         StringBuilder sb = new StringBuilder();
         PatientDetailVO patient = contextVO.getPatientSummary();
 
+        // 1. 患者基础概览信息
         sb.append("PatientOverview\n");
         appendField(sb, "registrationNo", patient == null ? null : patient.getRegistrationNo());
         appendField(sb, "visitNo", patient == null ? null : patient.getVisitNo());
@@ -95,6 +149,7 @@ public class AiReportPromptBuilder {
         appendField(sb, "dischargeMainDiag", patient == null ? null : patient.getDischargeMainDiag());
         sb.append('\n');
 
+        // 2. 诊断证据信息
         sb.append("DiagnosisEvidence\n");
         if (CollUtil.isEmpty(contextVO.getDiagnosisSummary())) {
             sb.append("- none\n");
@@ -110,6 +165,7 @@ public class AiReportPromptBuilder {
         }
         sb.append('\n');
 
+        // 3. 检查证据信息（器械/影像检查）
         sb.append("ExamEvidence\n");
         if (CollUtil.isEmpty(contextVO.getExamSummary())) {
             sb.append("- none\n");
@@ -125,6 +181,7 @@ public class AiReportPromptBuilder {
         }
         sb.append('\n');
 
+        // 4. 检验证据信息（实验室检验）
         sb.append("LabEvidence\n");
         if (CollUtil.isEmpty(contextVO.getLabSummary())) {
             sb.append("- none\n");
@@ -143,6 +200,7 @@ public class AiReportPromptBuilder {
         }
         sb.append('\n');
 
+        // 5. 护理证据信息（护理测量数据）
         sb.append("NursingEvidence\n");
         if (CollUtil.isEmpty(contextVO.getNursingSummary())) {
             sb.append("- none\n");
@@ -160,6 +218,13 @@ public class AiReportPromptBuilder {
         return sb.toString().trim();
     }
 
+    /**
+     * 辅助方法：向StringBuilder中追加非空字段
+     * 空值字段直接跳过，不拼接
+     * @param sb 字符串构建器
+     * @param label 字段标签
+     * @param value 字段值
+     */
     private void appendField(StringBuilder sb, String label, String value) {
         if (StrUtil.isBlank(value)) {
             return;
