@@ -17,8 +17,6 @@ import java.util.regex.Pattern;
 /**
  * AI临床报告解析器
  * 负责对AI生成的临床报告进行格式校验、内容提取、风险等级判定、摘要卡片构建等核心处理
- *
- * @author healthy-demo-backed
  */
 @Component
 public class AiReportParser {

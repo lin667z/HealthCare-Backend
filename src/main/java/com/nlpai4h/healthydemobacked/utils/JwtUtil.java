@@ -14,8 +14,6 @@ import java.util.Map;
 /**
  * JWT工具类
  * 提供JWT令牌的生成和解析功能
- *
- * @author system
  */
 public class JwtUtil {
 

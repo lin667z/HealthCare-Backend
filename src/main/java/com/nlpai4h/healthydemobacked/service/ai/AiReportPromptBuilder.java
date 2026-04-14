@@ -18,9 +18,6 @@ import org.springframework.stereotype.Component;
  * AI临床报告提示词构建器
  * 核心职责：组装系统指令、报告格式模板、患者临床上下文数据，生成给AI模型的完整提示词
  * 遵循Spring组件化设计，可直接注入使用
- *
- * @author healthy-demo-backed
- * @date 2025
  */
 @Component
 public class AiReportPromptBuilder {
