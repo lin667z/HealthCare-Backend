@@ -2,6 +2,10 @@ package com.nlpai4h.healthydemobacked.model.vo;
 
 import lombok.Data;
 
+/**
+ * 患者首页展示视图对象
+ * 用于首页卡片式展示患者的关键信息
+ */
 @Data
 public class PatientHomeVO {
     /**

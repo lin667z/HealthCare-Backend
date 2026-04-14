@@ -41,6 +41,9 @@ public class AiReport extends BaseEntity {
      */
     private String report;
 
+    /**
+     * 部分报告内容（流式输出时使用）
+     */
     private String partialReport;
 
     /**
@@ -48,5 +51,8 @@ public class AiReport extends BaseEntity {
      */
     private Integer status;
 
+    /**
+     * 状态信息（如错误信息）
+     */
     private String statusMessage;
 }
